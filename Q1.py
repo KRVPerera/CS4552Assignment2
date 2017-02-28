@@ -6,7 +6,8 @@ import math
 import bisect
 import logging
 import argparse
-from scipy import sparse
+
+from scipy.sparse import csr_matrix
 
 logLevel = logging.ERROR
 
@@ -135,25 +136,34 @@ class CSR:
             rows.append(self.row_ptr[i] - self.row_ptr[i - 1])
 
         logging.debug(rows)
+        col_ind_tmp = []
         for row, j in enumerate(rows):
             for i in range(j):
-                ccs.col_ind.append(row)
+                col_ind_tmp.append(row)
 
+        ccs.col_ind = np.array(col_ind_tmp)
+        # ccs.col_ind = np.concatenate((ccs.col_ind,col_ind_tmp))
+
+        val_tmp = []
         for k, lis in dic.items():
             for id, value in enumerate(lis):
-                ccs.val.append(value)
+                val_tmp.append(value)
 
+        ccs.val = np.concatenate((ccs.val,val_tmp))
+
+        col_ptr_tmp = []
         sum = 0
         for i in range(self.W):
             sum += len(dic[i])
-            ccs.row_ptr.append(sum)
-        str = "\nValues : {}\nrow_ind : {}\ncol_ptr : {}\n".format(ccs.val, ccs.col_ind, ccs.row_ptr)
+            col_ptr_tmp.append(sum)
+        ccs.row_ptr = np.concatenate((ccs.row_ptr,col_ptr_tmp))
+        str = "\nValues : {}\nIndices : {}\nIndices Pointers : {}\n".format(ccs.val, ccs.col_ind, ccs.row_ptr)
         logging.debug(str)
         return ccs
 
 
     def __str__(self, *args, **kwargs):
-        str = "Values : {}\ncol_ind : {}\nrow_ptr : {}\n".format(self.val, self.col_ind, self.row_ptr)
+        str = "Values : {}\nIndices : {}\nIndices Pointers : {}\n".format(self.val, self.col_ind, self.row_ptr)
         return str
 
     def __get__slice(self,row):
@@ -190,35 +200,38 @@ def main():
     logging.debug("Running Q1 with size : {0} x {0} matrix".format(N))
 
     mat4 = randomizeMatrix(N)
-    # print("Randomly generated matrix : ")
-    # print(mat4)
-    # for i in range(N):
-    #     logging.debug(mat4[i])
-    #
-    # csr = CSR(mat4)
-    # print("\nCSR Format of the matrix : ")
-    # print(csr)
-    #
-    # logging.debug("Changing diagonal elements to 2016")
-    # for i in range(N):
-    #     mat4[i][i] = 2016
-    #     csr.set(i, i, 2016)
-    #     print(mat4)
-    #     print(csr)
-    #
-    # print("\nDiagonal set CSR Format of the matrix : ")
-    # print(mat4)
-    # print(csr)
-    #
-    # for i in range(N):
-    #     for j in range(N):
-    #         print("{0:-10}".format(csr.get(i, j)), end='\t')
-    #     print()
 
-    mtx = sparse.csr_matrix(mat4)
-    print(mtx.data)
-    print(mtx.indices)
-    print(mtx.indptr)
+    print("Randomly generated matrix : ")
+    print(mat4)
+
+    csr = CSR(mat4)
+    print("\nCSR Format of the matrix : ")
+    print(csr)
+
+    logging.debug("Changing diagonal elements to 2016")
+    for i in range(N):
+        mat4[i][i] = 2016.0
+        csr.set(i, i, 2016.0)
+
+    for i in range(N):
+        for j in range(N):
+            assert mat4[i][j] == csr.get(i,j)
+
+
+    csr_sci = csr_matrix(mat4)
+    csc_me = csr.toCCS()
+    csc = csr_sci.tocsc()
+
+    print(mat4)
+    print("\nDiagonal set CSR Format of the matrix : ")
+    print(csc_me)
+    print(csc.data)
+    print(csc.indices)
+    print(csc.indptr)
+
+    for i in range(N):
+        for j in range(N):
+            assert mat4[j][i] == csr.get(i,j)
 
 
 if __name__ == '__main__':

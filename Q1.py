@@ -81,21 +81,7 @@ class CSR:
         row = int(row)
         col = int(col)
         self.set_new(row, col, value)
-        #start, end, stride = self.row_ptr[row], self.row_ptr[row + 1], self.row_ptr[row + 1] - self.row_ptr[row]
-        # start, end, stride = self.__get__slice(row)
-        # if stride != 0:
-        #     id = bisect.bisect_left(self.col_ind, col, lo=start, hi=min(end , len(self.col_ind) - 1))
-        #     if ((self.col_ind[id+1] == col) and ((id+1) <= len(self.col_ind) - 1)):
-        #         self.val[id+1] = value
-        #     else:
-        #         self.col_ind.insert(id, col)
-        #         self.val.insert(id, value)
-        # elif stride == 1:
-        #     pass
-        # else:
-        #     self.col_ind.insert(start, col)
-        #     self.val.insert(start, value)
-        # self.row_ptr[row + 1:] = map(lambda x: x + 1, self.row_ptr[row + 1:])
+
 
     def set_new(self, row, col, value):
         start, end, stride = self.__get__slice(row)
@@ -219,6 +205,20 @@ class CSR:
                         ccs.set(i, col, val)
         return ccs
 
+    def vecmul(self, vec):
+        side = len(self.row_ptr) - 1
+        vside = len(vec)
+        if (side != vside):
+            raise IndexError("Cannot multiple these dimensions")
+        ans = np.zeros((side, 1))
+        for i in range(side):
+            ithRow_vals, ithRow_ids = self.getRow(i)
+            for col, val in zip(ithRow_ids, ithRow_vals):
+                ans[i][0] += val * vec[int(col)][0]
+        return ans
+
+
+
     def __str__(self, *args, **kwargs):
         str = "Values : {}\nIndices : {}\nIndices Pointers : {}\n".format(self.val, self.col_ind, self.row_ptr)
         return str
@@ -280,7 +280,13 @@ def main():
     csc_me = csr.toCCS()
     print(csc_me)
 
-
+    print("Testing mat-vec multiplication")
+    initial = np.ones((3, 1))
+    # initial[1][0] = 5
+    matt = randomizeMatrix(3)
+    csrt = CSR(mat4)
+    ans = csrt.vecmul(initial)
+    print(ans)
 
 if __name__ == '__main__':
     main()

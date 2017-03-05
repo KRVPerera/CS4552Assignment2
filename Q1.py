@@ -7,7 +7,7 @@ import bisect
 import logging
 import argparse
 from copy import deepcopy
-import itertools
+import time
 from scipy.sparse import csr_matrix
 
 logLevel = logging.ERROR
@@ -19,6 +19,7 @@ class CSR:
     """
         Complex Row Storage, Complex Sparse Row, Yale Format implementation for 2D sparse matrices
     """
+
     def __init__(self, denseMatrix=[[]]):
         self.load(denseMatrix)
 
@@ -54,36 +55,19 @@ class CSR:
         :param col: column index of the dense matrix form (j)
         :return: value at the row, col (i,j) location a(i, j)
         """
-        start, end, stride = self.row_ptr[row], self.row_ptr[row + 1], self.row_ptr[row + 1]-self.row_ptr[row ]
+        start, end, stride = self.row_ptr[row], self.row_ptr[row + 1], self.row_ptr[row + 1] - self.row_ptr[row]
 
         if stride == 0:
             return 0
         elif stride == 1 and self.col_ind[start] == col:
             return self.val[start]
         else:
-            """  Old code sequential search
-            # id = -1
-            # for j in range(start, end):
-            #     if(self.col_ind[j] == col):
-            #         id = j
-            #         break
-            # else:
-            #     return 0
-            # return self.val[id] """
-
-            # New code uses binary search
-            id = bisect.bisect_left(self.col_ind, col, lo=start, hi=end-1)
+            id = bisect.bisect_left(self.col_ind, col, lo=start, hi=end - 1)
             if (self.col_ind[id] == col):
                 return self.val[id]
         return 0
 
     def set(self, row, col, value):
-        row = int(row)
-        col = int(col)
-        self.set_new(row, col, value)
-
-
-    def set_new(self, row, col, value):
         start, end, stride = self.__get__slice(row)
         set = False
         if stride == 0:
@@ -93,13 +77,13 @@ class CSR:
         elif stride == 1:
             if (self.col_ind[start] == col):
                 self.val[start] = value
-            elif(self.col_ind[start] > col):
+            elif (self.col_ind[start] > col):
                 self.col_ind = np.insert(self.col_ind, start, col)
                 self.val = np.insert(self.val, start, value)
                 set = True
             else:
-                self.col_ind = np.insert(self.col_ind, start+1, col)
-                self.val = np.insert(self.val, start+1, value)
+                self.col_ind = np.insert(self.col_ind, start + 1, col)
+                self.val = np.insert(self.val, start + 1, value)
                 set = True
         else:
             id = bisect.bisect_left(self.col_ind, col, lo=start, hi=end)
@@ -113,7 +97,7 @@ class CSR:
                 self.col_ind = np.insert(self.col_ind, id, col)
                 self.val = np.insert(self.val, id, value)
                 set = True
-        if(set):
+        if (set):
             self.row_ptr[row + 1:] = map(lambda x: x + 1, self.row_ptr[row + 1:])
 
     def toCCS(self):
@@ -141,14 +125,14 @@ class CSR:
             for id, value in enumerate(lis):
                 val_tmp.append(value)
 
-        ccs.val = np.concatenate((ccs.val,val_tmp))
+        ccs.val = np.concatenate((ccs.val, val_tmp))
 
         col_ptr_tmp = []
         sum = 0
         for i in range(self.W):
             sum += len(dic[i])
             col_ptr_tmp.append(sum)
-        ccs.row_ptr = np.concatenate((ccs.row_ptr,col_ptr_tmp))
+        ccs.row_ptr = np.concatenate((ccs.row_ptr, col_ptr_tmp))
         str = "\nValues : {}\nIndices : {}\nIndices Pointers : {}\n".format(ccs.val, ccs.col_ind, ccs.row_ptr)
         logging.debug(str)
         return ccs
@@ -217,14 +201,24 @@ class CSR:
                 ans[i][0] += val * vec[int(col)][0]
         return ans
 
-
+    def vecmulSimple(self, vec):
+        side = len(self.row_ptr) - 1
+        vside = len(vec)
+        ans = []
+        for i in range(side):
+            ans.append(0)
+            ithRow_vals, ithRow_ids = self.getRow(i)
+            for col, val in zip(ithRow_ids, ithRow_vals):
+                ans[i] += val * vec[int(col)][0]
+        return ans
 
     def __str__(self, *args, **kwargs):
         str = "Values : {}\nIndices : {}\nIndices Pointers : {}\n".format(self.val, self.col_ind, self.row_ptr)
         return str
 
-    def __get__slice(self,row):
+    def __get__slice(self, row):
         return (self.row_ptr[row], self.row_ptr[row + 1], self.row_ptr[row + 1] - self.row_ptr[row])
+
 
 def randomizeMatrix(n):
     """
@@ -248,6 +242,101 @@ def randomizeMatrix(n):
     logging.info("Random matrix generation done")
     return retMat
 
+
+def matmatAdditionDense(mat1, mat2):
+    n = len(mat1)
+    retMat = np.zeros(dtype=float, shape=[n, n])
+    for i in range(n):
+        for j in range(n):
+            retMat[i][j] = mat1[i][j] + mat2[i][j]
+    return retMat
+
+
+def matvecMultDense(mat1, vec):
+    side = len(mat1) - 1
+    vside = len(vec)
+    ans = []
+    for i in range(side):
+        ans.append(0)
+        for j in range(side):
+            ans[i] += mat1[i][j] * vec[i]
+    return ans
+
+
+def GetMatMatAddTimings():
+    print("Calculating timing for matrix + matrix operation")
+    for n in [10, 50, 100, 500, 1000, 5000]:
+        mat1 = randomizeMatrix(n)
+        mat2 = randomizeMatrix(n)
+
+        csr1 = CSR(mat1)
+        csr2 = CSR(mat2)
+        mats1 = csr_matrix(mat1)
+        mats2 = csr_matrix(mat2)
+        startTime = time.time()
+        ansm_s = mats1 + mats2
+        # ansm_s = csr1.add(csr1, csr2)
+        endtime = time.time()
+        elapsedTimeSparse = endtime - startTime
+
+        startTime = time.time()
+        ansm_s_my = csr1.add(csr1, csr2)
+        endtime = time.time()
+        elapsedTimeSparseMy = endtime - startTime
+
+        startTime = time.time()
+        ansm_d = matmatAdditionDense(mat1, mat2)
+        endtime = time.time()
+        elapsedTimeDense = endtime - startTime
+
+        startTime = time.time()
+        ansm_d_sci = mat1 + mat2
+        endtime = time.time()
+        elapsedTimeDenseSci = endtime - startTime
+
+        ansm_s = ansm_s.toarray()
+        print(
+            "Samples : {0:4} Dense Numpy: {4:8.5} ms  Dense My: {1:10.8} ms  Sparse Scipy: {2:8.5} ms  Sparse My: {3:8.5} ms"
+                .format(n, elapsedTimeDense * 1000, elapsedTimeSparse * 1000, elapsedTimeSparseMy * 1000,
+                        elapsedTimeDenseSci * 1000))
+        # for i in range(n):
+        #     for j in range(n):
+        #         # ansm_d[i][j] == ansm_s.get(i, j)
+        #         assert ansm_d[i][j] == ansm_s[i][j]
+
+
+def GetMatVecMultTimings():
+    print("Calculating timing for matrix*vector operation")
+    for n in [10, 50, 100, 500, 1000, 5000]:
+        mat1 = randomizeMatrix(n)
+        randVec = np.random.rand(n, 1)
+        csr1 = CSR(mat1)
+        mats1 = csr_matrix(mat1)
+
+        startTime = time.time()
+        ansm_s = mats1 * randVec
+        endtime = time.time()
+        elapsedTimeSparse = endtime - startTime
+
+        startTime = time.time()
+        ansm_s_my = csr1.vecmulSimple(randVec)
+        endtime = time.time()
+        elapsedTimeSparseMy = endtime - startTime
+
+        startTime = time.time()
+        ansm_d = matvecMultDense(mat1, randVec)
+        endtime = time.time()
+        elapsedTimeDense = endtime - startTime
+
+        startTime = time.time()
+        ansm_d_sci = mat1 * randVec
+        endtime = time.time()
+        elapsedTimeDenseSci = endtime - startTime
+
+        print(
+            "Samples : {0:4} Dense Numpy: {4:8.5} ms  Dense My: {1:10.8} ms  Sparse Scipy: {2:8.5} ms  Sparse My: {3:8.5} ms"
+                .format(n, elapsedTimeDense * 1000, elapsedTimeSparse * 1000, elapsedTimeSparseMy * 1000,
+                        elapsedTimeDenseSci * 1000))
 
 def main():
     parser = argparse.ArgumentParser(description="CS4552 Scientific Computing\nAssignment 2\nQ1", epilog="Thank you...")
@@ -280,20 +369,17 @@ def main():
     csc_me = csr.toCCS()
     print(csc_me)
 
+    GetMatMatAddTimings()
+    # GetMatVecMultTimings()
+
 
 def GetMatVectMultTimings():
     print("Testing mat-vec multiplication")
     initial = np.ones((3, 1))
     # initial[1][0] = 5
-    matt = randomizeMatrix(3)
-    csrt = CSR(matt)
-    ans = csrt.vecmul(initial)
-    print(ans)
     raise NotImplemented
 
-
-def GetMatMatAddTimings():
-    raise NotImplemented
 
 if __name__ == '__main__':
     main()
+    # GetMatMatAddTimings()

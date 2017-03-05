@@ -1,9 +1,17 @@
 import numpy as np
 import scipy as sp
 import sys
+import random as rand
+import logging
+import math
+from copy import deepcopy
 
 epsilon = sys.float_info.epsilon
 np.set_printoptions(formatter={'float': '{: 0.20f}'.format})
+
+logLevel = logging.INFO
+
+logging.basicConfig(level=logLevel, format=' %(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
 
 def powerIterationMethod(matrix, startVector, iterations):
     result = startVector
@@ -40,23 +48,48 @@ def powerIterationMethod(matrix, startVector, iterations):
     return computedEigenValue
 
 
+def Q2PartESparseMatrix(n):
+    retMat = np.zeros(dtype=float, shape=[n, n])
+    randCounts = np.empty(shape=n, dtype=int)
+
+    for i in range(n):
+        randCounts[i] = (rand.random() * 100) % 16 + 5
+
+    randCounts_copy = deepcopy(randCounts)
+    logging.debug(randCounts)
+    while (sum(randCounts) > 0):
+        col = math.floor((rand.random() * 1000) % n)
+        if (randCounts[col] > 0):
+            row = math.floor((rand.random() * 1000) % n)
+            randCounts[col] = randCounts[col] - 1
+            retMat[row][col] = 1.0 / randCounts_copy[col]
+
+    logging.debug(retMat)
+    logging.info("Random matrix generation done")
+    return retMat
+
 
 def main():
-    mat = np.matrix('2 3 2;10 3 4;3 6 1',dtype=float)
-    initial = np.matrix('0.0;0.0;1.0')
-    print("Matrix given in the assignment")
-    print(mat.tolist())
+    # mat = np.matrix('2 3 2;10 3 4;3 6 1',dtype=float)
+    # initial = np.matrix('0.0;0.0;1.0')
+    # print("Matrix given in the assignment")
+    # print(mat.tolist())
+    #
+    #
+    # [eigens, vecs] = np.linalg.eig(mat)
+    # print("Eiegen values of matrix A of assignment")
+    # print(eigens)
+    # print("Maximum actual eiegen value : {0}".format(round(max(eigens).item(0))))
+    #
+    # print("\nPower Iteration method")
+    # print("Initial vector : {}".format(initial.tolist()))
+    # computedValue = powerIterationMethod(mat, initial, 100)
+    # print("Result from power iteration method : {}".format(computedValue))
+
+    print("Creating matrix for section e")
+    qemat = Q2PartESparseMatrix(1000)
 
 
-    [eigens, vecs] = np.linalg.eig(mat)
-    print("Eiegen values of matrix A of assignment")
-    print(eigens)
-    print("Maximum actual eiegen value : {0}".format(round(max(eigens).item(0))))
-
-    print("\nPower Iteration method")
-    print("Initial vector : {}".format(initial.tolist()))
-    computedValue = powerIterationMethod(mat, initial, 100)
-    print("Result from power iteration method : {}".format(computedValue))
 
 if __name__ == '__main__':
     main()

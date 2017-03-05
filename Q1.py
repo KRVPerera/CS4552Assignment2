@@ -280,13 +280,20 @@ def main():
     csc_me = csr.toCCS()
     print(csc_me)
 
+
+def GetMatVectMultTimings():
     print("Testing mat-vec multiplication")
     initial = np.ones((3, 1))
     # initial[1][0] = 5
     matt = randomizeMatrix(3)
-    csrt = CSR(mat4)
+    csrt = CSR(matt)
     ans = csrt.vecmul(initial)
     print(ans)
+    raise NotImplemented
+
+
+def GetMatMatAddTimings():
+    raise NotImplemented
 
 if __name__ == '__main__':
     main()

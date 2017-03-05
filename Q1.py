@@ -6,7 +6,8 @@ import math
 import bisect
 import logging
 import argparse
-
+from copy import deepcopy
+import itertools
 from scipy.sparse import csr_matrix
 
 logLevel = logging.ERROR
@@ -18,7 +19,6 @@ class CSR:
     """
         Complex Row Storage, Complex Sparse Row, Yale Format implementation for 2D sparse matrices
     """
-
     def __init__(self, denseMatrix=[[]]):
         self.load(denseMatrix)
 
@@ -78,6 +78,8 @@ class CSR:
         return 0
 
     def set(self, row, col, value):
+        row = int(row)
+        col = int(col)
         self.set_new(row, col, value)
         #start, end, stride = self.row_ptr[row], self.row_ptr[row + 1], self.row_ptr[row + 1] - self.row_ptr[row]
         # start, end, stride = self.__get__slice(row)
@@ -114,8 +116,12 @@ class CSR:
                 self.val = np.insert(self.val, start+1, value)
                 set = True
         else:
-            id = bisect.bisect_left(self.col_ind, col, lo=start, hi=end - 1)
-            if (self.col_ind[id] == col):
+            id = bisect.bisect_left(self.col_ind, col, lo=start, hi=end)
+            if (id == end):
+                self.col_ind = np.insert(self.col_ind, id, col)
+                self.val = np.insert(self.val, id, value)
+                set = True
+            elif (self.col_ind[id] == col):
                 self.val[id] = value
             else:
                 self.col_ind = np.insert(self.col_ind, id, col)
@@ -161,6 +167,57 @@ class CSR:
         logging.debug(str)
         return ccs
 
+    def getRow(self, i):
+        if (i + 1 > len(self.row_ptr)):
+            raise IndexError
+        start = self.row_ptr[i]
+        end = self.row_ptr[i + 1]
+        elms = end - start
+        if (elms == 0):
+            return [], []
+        else:
+            cols = []
+            vals = []
+            for i in range(elms):
+                cols.append(self.col_ind[start + i])
+                vals.append(self.val[start + i])
+            assert len(cols) == len(vals)
+            return vals, cols
+
+    def add(self, csr1, csr2):
+        ccs = deepcopy(csr1)
+        rows1 = csr1.row_ptr
+        maxL = len(rows1)
+        # if(maxL != len(rows2)): # matrix lengths are different
+        #     raise IndexError("Cannot add matrices with different dimentions")
+
+        for i in range(maxL - 1):
+            row1_c, row1_col_ids = csr1.getRow(i)
+            row2_c, row2_col_ids = csr2.getRow(i)
+            row2_len = len(row2_col_ids)
+            row1_len = len(row1_col_ids)
+            if row2_len == 0:
+                continue
+            elif row1_len == 0:
+                for col, val in zip(row2_col_ids, row2_c):
+                    ccs.set(i, col, val)
+            elif row2_len > 0:
+                k = 0
+                for col, val in zip(row2_col_ids, row2_c):
+                    if k < row1_len:
+                        col1_id = row1_col_ids[k]
+                        if (col1_id == col):
+                            ccs.set(i, col, val + row1_c[k])
+                            k = k + 1
+                        elif col1_id < col:
+                            oldk = k
+                            k = k + 1
+                            ccs.set(i, col, val)
+                        else:
+                            ccs.set(i, col, val)
+                    else:
+                        ccs.set(i, col, val)
+        return ccs
 
     def __str__(self, *args, **kwargs):
         str = "Values : {}\nIndices : {}\nIndices Pointers : {}\n".format(self.val, self.col_ind, self.row_ptr)
@@ -213,25 +270,16 @@ def main():
         mat4[i][i] = 2016.0
         csr.set(i, i, 2016.0)
 
-    for i in range(N):
-        for j in range(N):
-            assert mat4[i][j] == csr.get(i,j)
-
-
-    csr_sci = csr_matrix(mat4)
-    csc_me = csr.toCCS()
-    csc = csr_sci.tocsc()
-
+    print("After Changing the diagonal elements to 2016")
     print(mat4)
-    print("\nDiagonal set CSR Format of the matrix : ")
-    print(csc_me)
-    print(csc.data)
-    print(csc.indices)
-    print(csc.indptr)
 
-    for i in range(N):
-        for j in range(N):
-            assert mat4[j][i] == csr.get(i,j)
+    print("\nCSR Format of the matrix : ")
+    print(csr)
+
+    print("Changing the CSR format to CCS")
+    csc_me = csr.toCCS()
+    print(csc_me)
+
 
 
 if __name__ == '__main__':
